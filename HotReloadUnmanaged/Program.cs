@@ -15,12 +15,13 @@ namespace HotReload
     public class Program
     {
 		// Basic Win32 API interface taken from https://web.archive.org/web/20100514102626/http://forums.fanatic.net.nz/index.php?showtopic=18873
-		public static SemaphoreSlim BuildSema = new SemaphoreSlim(1);
 
  		public const int SW_SHOWDEFAULT = 10;
  		public const int SW_RESTORE = 9;
  		public const int SW_SHOW = 5;
 	    public const uint WM_DROPFILES = 0x0233;
+
+
 
 		[DllImport("Kernel32.dll", SetLastError = true)]
 		public static extern int GlobalLock(IntPtr Handle);
@@ -43,6 +44,25 @@ namespace HotReload
 
 		[DllImport("user32.dll")]
 		static extern public uint SendInput(uint cInputs, IntPtr pInputs, int cbSize);
+
+		private delegate bool EnumWindowsProc(IntPtr hWnd, int lParam);
+
+		[DllImport("USER32.DLL")]
+		private static extern bool EnumWindows(EnumWindowsProc enumFunc, int lParam);
+
+		[DllImport("USER32.DLL")]
+		private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+
+		[DllImport("USER32.DLL")]
+		private static extern int GetWindowTextLength(IntPtr hWnd);
+
+		[DllImport("USER32.DLL")]
+		private static extern bool IsWindowVisible(IntPtr hWnd);
+
+		[DllImport("USER32.DLL")]
+		private static extern IntPtr GetShellWindow();
+
+
 
 		[Serializable]
 		[StructLayout(LayoutKind.Sequential)]
@@ -94,30 +114,6 @@ namespace HotReload
 			return windows;
 		}
 
-		private delegate bool EnumWindowsProc(IntPtr hWnd, int lParam);
-
-		[DllImport("USER32.DLL")]
-		private static extern bool EnumWindows(EnumWindowsProc enumFunc, int lParam);
-
-		[DllImport("USER32.DLL")]
-		private static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
-
-		[DllImport("USER32.DLL")]
-		private static extern int GetWindowTextLength(IntPtr hWnd);
-
-		[DllImport("USER32.DLL")]
-		private static extern bool IsWindowVisible(IntPtr hWnd);
-
-		[DllImport("USER32.DLL")]
-		private static extern IntPtr GetShellWindow();
-
-
-
-
-
-
-
-
 
 
 		public static byte[] RawSerialize(object o)
@@ -131,11 +127,14 @@ namespace HotReload
 			return bytes;
 		}
 
+
+
         public static IntPtr GetWindowHandleByTitle(string title)
         {
 			var windows = GetOpenWindows();
 			return windows.First(x => x.Key.Contains(title)).Value;
         }
+
 
 
 		public static int WriteBytes(byte[] source, IntPtr dest, int offset)
@@ -153,6 +152,7 @@ namespace HotReload
             }
 			return i; 
 		}
+
 
 
 		public static async void DropFileOnWindow(string filePath, string window)
@@ -207,62 +207,18 @@ namespace HotReload
 
 
 
-
-		public static async void HandleChange(object sender, System.IO.FileSystemEventArgs args)
-		{
+        public static int Main(string[] args)
+        {
 			try
 			{
-				await BuildSema.WaitAsync(100);
-			}
-			catch(Exception ex)
-			{
-				return;
-			}
-			try
-			{
-				Console.WriteLine($@"{args.ChangeType} {args.Name}");
-				Console.WriteLine($@"Building new version...");
-				var result = await Cli.Wrap("pdc")
-					.WithArguments("source out")
-					.WithValidation(CommandResultValidation.None)
-					.ExecuteBufferedAsync();
-				if (result.ExitCode != 0)
-				{
-					Console.WriteLine($@"Error building.");
-					Console.WriteLine(result.StandardOutput);
-					Console.WriteLine(result.StandardError);
-					return;
-				}
-				Console.WriteLine($@"Build complete!");
-				Console.WriteLine(result.StandardOutput);
-				Console.WriteLine(result.StandardError);
-				Console.WriteLine($@"Loading into sim...");
 				DropFileOnWindow("out.pdx", "Playdate");
-				BuildSema.Release();
-				Console.WriteLine($@"Done!");
+				return 0;
 			}
 			catch (Exception ex)
 			{
-				Console.WriteLine($@"Error building.\n{ex.ToString()}");
-				BuildSema.Release();
+				Console.Error.WriteLine(ex.Message);
+				return 1;
 			}
-		}
-        public static int Main(string[] args)
-        {
-			FileSystemWatcher watcher = new FileSystemWatcher();
-			watcher.Path = "source";
-			watcher.NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.Attributes;
-			watcher.Filter = "*.*";
-			watcher.Changed += HandleChange;
-			watcher.Created += HandleChange;
-			watcher.Deleted += HandleChange;
-			watcher.IncludeSubdirectories = true;
-			watcher.EnableRaisingEvents = true;
-			Console.WriteLine("Watching for changes.");
-
-			System.Threading.Thread.Sleep(System.Threading.Timeout.Infinite);
-
-            return 0;
         }
     }
 }
