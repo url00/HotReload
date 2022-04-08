@@ -1,0 +1,9 @@
+{
+  "profiles": {
+    "HotReload": {
+      "commandName": "Project",
+      "commandLineArgs": "source",
+      "workingDirectory": "C:\\Users\\nathan\\Dropbox\\Projects\\pdtest"
+    }
+  }
+}
